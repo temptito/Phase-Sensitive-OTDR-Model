@@ -65,6 +65,7 @@ class otdr():
     
     def PZT(self, t):
         
+		
         return self.K_mod * np.sin(2 * np.pi * self.F_mod * t)
        
         
