@@ -5,7 +5,7 @@ class otdr():
     
     def __init__(self):
         self.test_params = {
-                                'fiber': {'L': 1000, 'n_rc': 3},
+                                'fiber': {'L': 1000, 'n_rc': 3, 'z_rp': [], 'K_rp': [-40]},
                                 'receiver': {'Ladc': 1, 'long_time': 1},
                                 'pulse': {'tau': 200e-9, 'fp': 1e3, 'w_drift': 0.1e6, 'Lorentz linewidth': 1e3},
                                 'PZT': {'K_mod': 0, 'F_mod': 0, 'Z_pzt': 500, 'len_pzt': 30}
@@ -34,6 +34,20 @@ class otdr():
         n_rc = params['fiber']['n_rc']
         np.random.seed(1) # fixing random RC distribution
         self.z_rc = np.sort(np.random.rand(int(n_rc*L)))*L # RC's coordinates along fiber
+
+        n_rc_ns = n_rc * self.c / 1e9 / self.n0                                         #РЦ на нc
+        K_rc_ns = -80                                                                 #рассивание на нс
+        K_rc = 10**(0.1*K_rc_ns) / n_rc_ns
+        K_rc = np.ones(len(self.z_rc)) * np.sqrt(K_rc)                                #Коэффициент рассеивания на 1 РЦ
+        
+        K_rp = np.array(params['fiber']['K_rp'])
+        z_rp = np.array(params['fiber']['z_rp'])
+#         if K_rp:
+        K_rp = 10**(0.1*(K_rp))                                                    #ВЧБР = -58 #
+        K_rp = np.ones(len(z_rp)) * np.sqrt(K_rp)                                #Коэффициент рассеивания на 1 РТ,
+    
+        x = np.concatenate(([self.z_rc, K_rc],[z_rp, K_rp]), axis=1)    #Набор точек рассеваний и их коэффициентов
+        self.Z_K = x[:,x[0,:].argsort()]  
         
         """set_receiver"""
         Ladc = params['receiver']['Ladc']
@@ -49,12 +63,10 @@ class otdr():
         fp = params['pulse']['fp']
         self.Lorentz_linewidth = params['pulse']['Lorentz linewidth']
         self.Time = np.arange(0, long_time, 1/fp)
-
         self.Timp = fast_time[fast_time <= tau]  # time-window of probe pulse, s
         self.Pulse = np.heaviside(tau/2 - np.abs(self.Timp-tau/2),1) # probe pulse  
         self.NPulse=len(self.Timp)
-        
-        self.ZN = np.array(self.z_rc / L * (self.Ndots - self.NPulse), dtype=np.int) #z-coordinate index in spatial-window "Distance" OTDR-trace
+        self.ZN = np.array(self.Z_K[0] / L * (self.Ndots - self.NPulse), dtype=np.int) #z-coordinate index in spatial-window "Distance" OTDR-trace
         
         """set_PZT"""
         self.K_mod = params['PZT']['K_mod']
@@ -72,16 +84,18 @@ class otdr():
         
         w = self.w0 + 2 * np.pi * self.w_drift * t
         kv = w * self.n0 / self.c
-        
         phase_pzt = 0
         
-        for z_n, Zn in zip(self.z_rc, self.ZN):
-
+        for z_k_n, Zn in zip(self.Z_K.T, self.ZN):
+            
+            z_n, k_n = z_k_n
+            
             if z_n >= self.Z_pzt and z_n < self.Z_pzt + self.len_pzt:
                 
                 phase_pzt = (z_n - self.Z_pzt) / self.len_pzt *  self.PZT(t)
-                            
-            pulse_back = self.Pulse * np.exp(1j * self.phase_noise[idx]) * np.exp(2j * (kv * z_n + phase_pzt)) 
+               
+            
+            pulse_back = k_n * self.Pulse * np.exp(1j * self.phase_noise[idx]) * np.exp(2j * (kv * z_n + phase_pzt)) 
             
             if Zn < 0: 
                 
@@ -117,33 +131,3 @@ class otdr():
         
         
         return self.W, self.Time, self.Distance, params
-
-
-
-def calc_ASE(shape, G = 17, Be=10e6):
-    NF = 7         #дБ шум-фактор
-    F = 10**(NF/10)
-     #дБ Gain
-    G = 10**(G/10)
-    h = 6.626*10e-34
-    c = 3e8
-    lamda = 1550e-9
-    nu = c/lamda
-    rho_ase = (F*G - 1)*h*nu
-    P_ase = rho_ase * Be
-    ASE_amp = (P_ase/2)**0.5
-    size = (2, shape[0], shape[1])
-    ASE =  ASE_amp * np.random.normal(0,1,size)
-    I_ase, Q_ase = ASE[0], ASE[1]
-    E_ase = I_ase + 1j * Q_ase
-    return E_ase
-
-
-def add_ASE(unnormed_E, G=15, Be=10e6, LEVEL=10**(5)):
-    """Adding ASE noise to complex amplitudes
-    G - gain in dB, Be - electrical bandwidth, LEVEL - norming parametr depends of signal power"""
-    delta = np.mean(np.abs(unnormed_E[0])**2)*LEVEL
-    normed_E = unnormed_E / np.sqrt(delta)
-    En = normed_E + calc_ASE(shape=np.shape(normed_E), G=G, Be=Be)
-    return En * G
-    
