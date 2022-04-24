@@ -37,18 +37,18 @@ class otdr():
         np.random.seed(1) # fixing random RC distribution
         self.z_rc = np.sort(np.random.rand(int(n_rc*L)))*L # RC's coordinates along fiber
 
-        n_rc_ns = n_rc * self.c / 1e9 / self.n0                                         #РЦ на нc
-        K_rc_ns = -80                                                                 #рассивание на нс
+        n_rc_ns = n_rc * self.c / 1e9 / self.n0                                         # number RC per nanosec
+        K_rc_ns = -80                                                                 #reflect on RC per nanosec
         K_rc = 10**(0.1*K_rc_ns) / n_rc_ns
-        K_rc = np.ones(len(self.z_rc)) * np.sqrt(K_rc)                                #Коэффициент рассеивания на 1 РЦ
+        K_rc = np.ones(len(self.z_rc)) * np.sqrt(K_rc)                                # reflect per RC
         
         K_rp = np.array(params['fiber']['K_rp'])
         z_rp = np.array(params['fiber']['z_rp'])
         
-        K_rp = 10**(0.1*(K_rp))                                                    #ВЧБР = -58 #
-        K_rp = np.ones(len(z_rp)) * np.sqrt(K_rp)                                #Коэффициент рассеивания на 1 РТ,
+        K_rp = 10**(0.1*(K_rp))                                                    
+        K_rp = np.ones(len(z_rp)) * np.sqrt(K_rp)                                #reflect per RP
     
-        x = np.concatenate(([self.z_rc, K_rc],[z_rp, K_rp]), axis=1)    #Набор точек рассеваний и их коэффициентов
+        x = np.concatenate(([self.z_rc, K_rc],[z_rp, K_rp]), axis=1)    #coordinates and correspodning coefficients
         self.Z_K = x[:,x[0,:].argsort()]  
         
         """set_receiver"""
@@ -144,9 +144,9 @@ class otdr():
 
 
 def calc_ASE(shape, G = 17, Be=10e6):
-    NF = 7         #дБ шум-фактор
+    NF = 7         #dB noise factor
     F = 10**(NF/10)
-     #дБ Gain
+     #dB Gain
     G = 10**(G/10)
     h = 6.626*10e-34
     c = 3e8
